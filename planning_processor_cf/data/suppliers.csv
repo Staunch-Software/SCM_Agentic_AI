@@ -1,0 +1,11 @@
+supplier_id,supplier_name,avg_lead_time_days
+SUP001,Gonzalez and Sons,19
+SUP002,Flowers Group,50
+SUP003,Archer and Sons,53
+SUP004,"Dunlap, Floyd and Brooks",25
+SUP005,"Armstrong, Sanders and Roach",43
+SUP006,"Stout, Lewis and Burgess",16
+SUP007,"Miller, Villarreal and Jordan",24
+SUP008,Barrett and Sons,31
+SUP009,"Mason, Mueller and Luna",25
+SUP010,Navarro-Edwards,20
