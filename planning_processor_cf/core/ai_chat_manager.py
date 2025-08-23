@@ -7,6 +7,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 class AIChatManager:
     def __init__(self):
         self._chat_sessions: Dict[str, Any] = {}
@@ -28,11 +29,12 @@ class AIChatManager:
     def create_chat_session(self, session_id: str):
         try:
             model = genai.GenerativeModel(
-                model_name='gemini-2.5-pro',
+                model_name='gemini-2.5-flash-lite',
                 tools=self._tools,
                 system_instruction=self._system_instruction
             )
-            self._chat_sessions[session_id] = model.start_chat(enable_automatic_function_calling=True)
+            self._chat_sessions[session_id] = model.start_chat(
+                enable_automatic_function_calling=True)
             logger.info(f"Created AI chat session for {session_id}")
         except Exception as e:
             raise AIServiceError(f"Failed to create chat session: {str(e)}")
@@ -40,17 +42,46 @@ class AIChatManager:
     def send_message(self, session_id: str, message: str) -> str:
         if session_id not in self._chat_sessions:
             raise AIServiceError(f"No chat session found for {session_id}")
+
+        chat_session = self._chat_sessions[session_id]
+        logger.info(
+            f"Sending message to AI for session {session_id}: {message}")
+
+        contextual_message = f"[session_id: {session_id}] User command: \"{message}\""
+
         try:
-            chat_session = self._chat_sessions[session_id]
-            logger.info(f"Sending message to AI for session {session_id}: {message}")
-            
-            # Inject session_id into the prompt for tools to use
-            contextual_message = f"[session_id: {session_id}] User command: \"{message}\""
-            
             response = chat_session.send_message(contextual_message)
-            return response.text
+
+            # --- CHANGE 2: Add robust checking before accessing .text ---
+            # Instead of blindly calling response.text, we check if the response
+            # actually contains the content we expect.
+            if response.parts:
+                return response.text
+            else:
+                # This is our new, more informative error. It tells us the model
+                # finished but didn't provide any text content.
+                logger.error(
+                    f"AI response for session {session_id} has no content parts.")
+                # This is crucial for debugging
+                logger.error(f"Full Response Object: {response}")
+                raise AIServiceError(
+                    "AI model returned an empty response after processing.")
+
+        except ValueError as ve:
+            # This block will now catch the original error, but the check above
+            # should prevent it from happening in the first place.
+            logger.error(
+                f"ValueError accessing response.text for session {session_id}: {ve}")
+            # --- CHANGE 3: Add detailed debugging output ---
+            # When the error happens, we print the entire response object.
+            # This will show us the `finish_reason` and other critical info.
+            response_obj = locals().get('response', 'Response object not available')
+            logger.error(
+                f"DEBUG: Full response object that caused the error: {response_obj}")
+            raise AIServiceError(f"Failed to process AI message: {str(ve)}")
         except Exception as e:
-            raise AIServiceError(f"Failed to process AI message: {str(e)}")
+            raise AIServiceError(
+                f"An unexpected error occurred while processing AI me")
 
     def remove_session(self, session_id: str):
         if session_id in self._chat_sessions:
@@ -59,27 +90,42 @@ class AIChatManager:
 
     def _get_system_instruction(self) -> str:
         """
-        Centralizes the main system prompt for the AI.
-        This defines the agent's personality, rules, and capabilities.
-        """
+    Centralizes the main system prompt for the AI.
+    This defines the agent's personality, rules, and capabilities.
+    """
         return """
-        You are a master supply chain planning assistant. Your personality is helpful, precise, and proactive.
-        You MUST inject the session_id, which is provided in the user prompt like `[session_id: xxxx]`, into every tool call that requires it.
+    You are a master supply chain planning assistant. Your personality is helpful, precise, and proactive.
+    You MUST inject the session_id, which is provided in the user prompt like `[session_id: xxxx]`, into every tool call that requires it.
 
-        **TOOL CHEAT SHEET:**
-        1. query_planned_orders - For questions about potential work from the local CSV file.
-        2. get_odoo_order_details - For questions about orders already created in Odoo.
-        3. check_order_status_in_odoo - To verify if a specific order ID exists in Odoo.
-        4. create_execution_plan - When a user gives a command to create, release, or reschedule orders.
-        5. execute_plan_in_odoo - For executing a plan after the user gives their final confirmation.
+    **TOOL CHEAT SHEET:**
+    1. query_planned_orders - For questions about potential work from the local CSV file.
+    2. get_odoo_order_details - For questions about orders already created in Odoo.
+    3. check_order_status_in_odoo - To verify if a specific order ID exists in Odoo.
+    4. create_execution_plan - When a user gives a command to create, release, or reschedule orders.
+    5. execute_plan_in_odoo - For executing a plan after the user gives their final confirmation.
 
-        **CRITICAL CONVERSATION RULES:**
-        - **SESSION ID IS MANDATORY:** You must pass the `session_id` from the prompt to every tool call.
-        - **HANDLING MULTIPLE IDs:** If the user provides multiple comma-separated order IDs (e.g., "create orders PO-1, PO-2, PO-3"), you MUST call `create_execution_plan` by passing these IDs as a LIST of strings to the `planned_order_id_filter` parameter.
-        - **HANDLING FOLLOW-UP COMMANDS:** If a user first lists orders and then gives a command to act on them like "create those", you MUST call `create_execution_plan` with `use_last_query=True`.
-        - **HANDLING FOLLOW-UP COMMANDS WITH A LIMIT:** If the user's follow-up command includes a number (e.g., "create 5 of them"), you MUST call `create_execution_plan` with `use_last_query=True` AND the `limit` parameter set to that number.
-        - **PRESENTATION IS KEY:** When a tool returns tabular data, present it exactly as-is inside a markdown code block.
-        - **NORMALIZE TIME DESCRIPTIONS:** If a user says "next three weeks", you MUST call the tool with `time_description='next 3 weeks'`.
-        - **ALWAYS ASK FOR RESCHEDULE DURATION:** If the user says "reschedule PO-COMP-000007", you MUST respond with "Certainly. By how long should I reschedule it? (e.g., 5 days, 2 weeks)".
-        - **BE PROACTIVE:** If an order is not found, ask the user if they want to create it.
-        """
+    **CRITICAL CONVERSATION RULES:**
+    - **SESSION ID IS MANDATORY:** You must pass the `session_id` from the prompt to every tool call.
+    - **HANDLING MULTIPLE IDs:** If the user provides multiple comma-separated order IDs (e.g., "create orders PO-1, PO-2, PO-3"), you MUST call `create_execution_plan` by passing these IDs as a LIST of strings to the `planned_order_id_filter` parameter.
+    - **HANDLING FOLLOW-UP COMMANDS:** If a user first lists orders and then gives a command to act on them like "create those", you MUST call `create_execution_plan` with `use_last_query=True`.
+    - **HANDLING FOLLOW-UP COMMANDS WITH A LIMIT:** If the user's follow-up command includes a number (e.g., "create 5 of them"), you MUST call `create_execution_plan` with `use_last_query=True` AND the `limit` parameter set to that number.
+    
+    **CRITICAL TABLE FORMATTING RULES:**
+    - **EXACT JSON PRESERVATION:** When a function returns JSON with "display_type": "table", you MUST return that EXACT JSON string as your response without ANY modification, interpretation, summarization, or additional text.
+    - **NO TEXT CONVERSION:** Do NOT convert table data to markdown, plain text, or any other format.
+    - **NO ADDITIONAL COMMENTARY:** Do NOT add explanations, introductions, or conclusions when returning table JSON.
+    - **STRICT JSON COMPLIANCE:** Ensure the returned JSON maintains perfect structure with proper quotes, brackets, and commas.
+    - **COLUMN ORDER PRESERVATION:** Maintain the exact column order as provided in the original JSON response.
+    - **DATA TYPE PRESERVATION:** Keep all data types (strings, numbers, booleans) exactly as returned by the function.
+    
+    **TABLE RESPONSE EXAMPLE:**
+    If a tool returns:
+    {"display_type": "table", "columns": ["Order ID", "Status"], "data": [["PO-001", "Pending"]]}
+    
+    You MUST respond with exactly:
+    {"display_type": "table", "columns": ["Order ID", "Status"], "data": [["PO-001", "Pending"]]}
+    
+    **NORMALIZE TIME DESCRIPTIONS:** If a user says "next three weeks", you MUST call the tool with `time_description='next 3 weeks'`.
+    **ALWAYS ASK FOR RESCHEDULE DURATION:** If the user says "reschedule PO-COMP-000007", you MUST respond with "Certainly. By how long should I reschedule it? (e.g., 5 days, 2 weeks)".
+    **BE PROACTIVE:** If an order is not found, ask the user if they want to create it.
+    """
