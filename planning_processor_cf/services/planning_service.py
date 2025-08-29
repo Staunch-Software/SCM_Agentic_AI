@@ -25,7 +25,6 @@ class PlanningService:
                 if not last_queried_ids:
                     raise PlanningError("Cannot use last query because no orders are in memory.")
                 orders_to_action = df_enriched[df_enriched['planned_order_id'].isin(last_queried_ids)]
-                # Preserve the order from the last query for correct limiting
                 orders_to_action['planned_order_id'] = pd.Categorical(orders_to_action['planned_order_id'], categories=last_queried_ids, ordered=True)
                 orders_to_action = orders_to_action.sort_values('planned_order_id')
             elif kwargs.get('planned_order_id_filter'):
@@ -38,9 +37,13 @@ class PlanningService:
             else:
                 raise PlanningError("To create a plan, you must provide a time description, specific order IDs, or use the last query.")
 
+            # --- THIS IS THE FIX ---
+            # Standardize the filter to use "Purchase" and "Manufacture".
             if kwargs.get('item_type_filter'):
                 item_type = kwargs['item_type_filter'].lower()
-                orders_to_action = orders_to_action[orders_to_action['item_type'].str.lower() == item_type]
+                if item_type in ['purchase', 'manufacture']:
+                     orders_to_action = orders_to_action[orders_to_action['item_type'].str.lower() == item_type]
+            # --- END OF FIX ---
 
             if orders_to_action.empty:
                 return ActionPlan(actions=[])
@@ -75,11 +78,13 @@ class PlanningService:
                 order_data = action.get("order_data", {})
                 action_type = action.get("action_type")
                 if action_type == "create":
-                    if order_data.get("item_type") == "Make":
+                    # --- THIS IS THE FIX ---
+                    # Check for "Manufacture" instead of "Make".
+                    if order_data.get("item_type") == "Manufacture":
                         result = self.odoo_service.create_manufacturing_order(order_data)
-                    else:
+                    else: # Assumes anything else is a Purchase
                         result = self.odoo_service.create_purchase_order(order_data)
-                # Add reschedule logic here if needed
+                    # --- END OF FIX ---
                 else:
                     result = {"status": "skipped", "message": "Unknown action type"}
                 results.append(result)

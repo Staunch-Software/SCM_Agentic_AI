@@ -50,7 +50,7 @@ class OdooService:
         return self.execute_method(model_name, 'search_read', domain, fields=fields)
 
     def get_production_orders(self, domain: List) -> List[Dict]:
-        fields = ['display_name', 'x_planned_order_id', 'date_start', 'state']
+        fields = ['display_name', 'x_studio_planned_order_id', 'date_start', 'state']
         orders = self.search_and_read('mrp.production', domain, fields)
         for order in orders:
             order['type'] = 'Make'
@@ -58,7 +58,7 @@ class OdooService:
         return orders
 
     def get_purchase_orders(self, domain: List) -> List[Dict]:
-        fields = ['display_name', 'x_planned_order_id', 'date_planned', 'state']
+        fields = ['display_name', 'x_studio_planned_order_id', 'date_planned', 'state']
         orders = self.search_and_read('purchase.order', domain, fields)
         for order in orders:
             order['type'] = 'Buy'
@@ -81,7 +81,7 @@ class OdooService:
             po_vals = {
                 'partner_id': supplier_id,
                 'date_planned': order_data.get('suggested_due_date'),
-                'x_planned_order_id': order_data['planned_order_id'],
+                'x_studio_planned_order_id': order_data['planned_order_id'],
                 'order_line': [(0, 0, {
                     'product_id': product_id,
                     'product_qty': order_data.get('quantity'),
@@ -114,7 +114,7 @@ class OdooService:
                 'date_start': order_data.get('suggested_due_date'),
                 'bom_id': bom_ids[0],
                 'product_uom_id': uom_id,
-                'x_planned_order_id': order_data['planned_order_id']
+                'x_studio_planned_order_id': order_data['planned_order_id']
             }
             mo_id = self.execute_method('mrp.production', 'create', mo_vals)
             self.execute_method('mrp.production', 'action_confirm', [mo_id])

@@ -1,0 +1,43 @@
+Order Type,Planned ID,Item,Item Type,Quantity,Supplier,Lead Time,Planned Date,Due Date
+PO,PLN-PO-0002,[COMP0004] Tires ,Purchase,80.0,AutoSteel Ltd.,18,2025-08-29,2025-08-06
+PO,PLN-PO-0003,[COMP0005] Seats ,Purchase,125.0,AutoSteel Ltd.,24,2025-08-29,2025-08-06
+PO,PLN-PO-0004,[COMP0009] Glass Windows ,Purchase,170.0,AutoSteel Ltd.,12,2025-08-29,2025-08-06
+PO,PLN-PO-0005,[COMP0011] Brake Pads ,Purchase,80.0,AutoSteel Ltd.,21,2025-08-29,2025-08-06
+PO,PLN-PO-0006,[COMP0017] Door Locks ,Purchase,80.0,AutoSteel Ltd.,22,2025-08-29,2025-08-06
+PO,PLN-PO-0007,[COMP0020] Shock Absorbers ,Purchase,80.0,AutoSteel Ltd.,16,2025-08-29,2025-08-06
+PO,PLN-PO-0008,[COMP0023] Spark Plugs ,Purchase,80.0,AutoSteel Ltd.,26,2025-08-29,2025-08-06
+PO,PLN-PO-0009,[COMP0028] Seat Belts ,Purchase,125.0,AutoSteel Ltd.,12,2025-08-29,2025-08-06
+PO,PLN-PO-0010,[COMP0029] Floor Mats ,Purchase,125.0,AutoSteel Ltd.,12,2025-08-29,2025-08-06
+PO,PLN-PO-0019,[COMP0028] Seat Belts ,Purchase,50.0,AutoSteel Ltd.,12,2025-08-29,2025-08-21
+PO,PLN-PO-0020,[COMP0029] Floor Mats ,Purchase,50.0,AutoSteel Ltd.,12,2025-08-29,2025-08-21
+PO,PLN-PO-0018,[COMP0023] Spark Plugs ,Purchase,20.0,AutoSteel Ltd.,26,2025-08-29,2025-08-21
+PO,PLN-PO-0017,[COMP0020] Shock Absorbers ,Purchase,20.0,AutoSteel Ltd.,16,2025-08-29,2025-08-21
+PO,PLN-PO-0016,[COMP0017] Door Locks ,Purchase,20.0,AutoSteel Ltd.,22,2025-08-29,2025-08-21
+PO,PLN-PO-0013,[COMP0005] Seats ,Purchase,50.0,AutoSteel Ltd.,24,2025-08-29,2025-08-21
+PO,PLN-PO-0014,[COMP0009] Glass Windows ,Purchase,80.0,AutoSteel Ltd.,12,2025-08-29,2025-08-21
+PO,PLN-PO-0012,[COMP0004] Tires ,Purchase,20.0,AutoSteel Ltd.,18,2025-08-29,2025-08-21
+PO,PLN-PO-0015,[COMP0011] Brake Pads ,Purchase,20.0,AutoSteel Ltd.,21,2025-08-29,2025-08-21
+PO,PLN-PO-0032,[COMP0009] Glass Windows ,Purchase,20.0,AutoSteel Ltd.,12,2025-08-29,2025-08-31
+PO,PLN-PO-0029,[COMP0028] Seat Belts ,Purchase,125.0,AutoSteel Ltd.,12,2025-08-29,2025-09-20
+PO,PLN-PO-0034,[COMP0004] Tires ,Purchase,100.0,AutoSteel Ltd.,18,2025-08-29,2025-09-20
+PO,PLN-PO-0035,[COMP0005] Seats ,Purchase,150.0,AutoSteel Ltd.,24,2025-08-29,2025-09-20
+PO,PLN-PO-0038,[COMP0017] Door Locks ,Purchase,100.0,AutoSteel Ltd.,22,2025-08-29,2025-09-20
+PO,PLN-PO-0039,[COMP0020] Shock Absorbers ,Purchase,100.0,AutoSteel Ltd.,16,2025-08-29,2025-09-20
+PO,PLN-PO-0030,[COMP0029] Floor Mats ,Purchase,125.0,AutoSteel Ltd.,12,2025-08-29,2025-09-20
+PO,PLN-PO-0028,[COMP0023] Spark Plugs ,Purchase,80.0,AutoSteel Ltd.,26,2025-08-29,2025-09-20
+PO,PLN-PO-0042,[COMP0029] Floor Mats ,Purchase,150.0,AutoSteel Ltd.,12,2025-08-29,2025-09-20
+PO,PLN-PO-0026,[COMP0017] Door Locks ,Purchase,80.0,AutoSteel Ltd.,22,2025-08-29,2025-09-20
+PO,PLN-PO-0025,[COMP0011] Brake Pads ,Purchase,80.0,AutoSteel Ltd.,21,2025-08-29,2025-09-20
+PO,PLN-PO-0024,[COMP0009] Glass Windows ,Purchase,170.0,AutoSteel Ltd.,12,2025-08-29,2025-09-20
+PO,PLN-PO-0023,[COMP0005] Seats ,Purchase,125.0,AutoSteel Ltd.,24,2025-08-29,2025-09-20
+PO,PLN-PO-0022,[COMP0004] Tires ,Purchase,80.0,AutoSteel Ltd.,18,2025-08-29,2025-09-20
+PO,PLN-PO-0041,[COMP0028] Seat Belts ,Purchase,150.0,AutoSteel Ltd.,12,2025-08-29,2025-09-20
+PO,PLN-PO-0036,[COMP0009] Glass Windows ,Purchase,200.0,AutoSteel Ltd.,12,2025-08-29,2025-09-20
+PO,PLN-PO-0040,[COMP0023] Spark Plugs ,Purchase,100.0,AutoSteel Ltd.,26,2025-08-29,2025-09-20
+PO,PLN-PO-0027,[COMP0020] Shock Absorbers ,Purchase,80.0,AutoSteel Ltd.,16,2025-08-29,2025-09-20
+PO,PLN-PO-0037,[COMP0011] Brake Pads ,Purchase,100.0,AutoSteel Ltd.,21,2025-08-29,2025-09-20
+MO,PLN-MO-0001,[CAR0001] Hyundai Tucson,Manufacture,45.0,,45,2025-08-29,2025-09-21
+MO,PLN-MO-0031,[CAR0004] Hyundai Ioniq 6 ,Manufacture,20.0,,20,2025-08-29,2025-09-21
+MO,PLN-MO-0011,[CAR0002] Hyundai Elantra,Manufacture,30.0,,30,2025-08-29,2025-09-21
+MO,PLN-MO-0033,[CAR0005] Hyundai Kona,Manufacture,50.0,,0,2025-08-29,2025-09-21
+MO,PLN-MO-0021,[CAR0003] Hyundai Santa Fe,Manufacture,45.0,,0,2025-08-29,2025-09-21

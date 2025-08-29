@@ -3,14 +3,13 @@ from typing import Optional
 from .base_tool import BaseTool
 from services.data_service import DataService
 from utils.time_parser import TimeParser
-from utils.data_formatter import DataFormatter
+import pandas as pd
 
 class QueryTool(BaseTool):
     def __init__(self, data_service: DataService, session_manager):
         super().__init__(session_manager)
         self.data_service = data_service
         self.time_parser = TimeParser()
-        self.data_formatter = DataFormatter()
 
     def query_planned_orders(self, session_id: str, time_description: Optional[str] = None, item_type: Optional[str] = None, query_type: str = "list", reschedule_needed: Optional[bool] = None) -> str:
         self.log_tool_execution("query_planned_orders", session_id, time_description=time_description, item_type=item_type, query_type=query_type, reschedule_needed=reschedule_needed)
@@ -19,8 +18,13 @@ class QueryTool(BaseTool):
             
             if time_description:
                 df = self.time_parser.filter_dataframe_by_time(df, time_description, date_column='suggested_due_date')
-            if item_type and item_type.lower() in ['make', 'buy']:
+            
+            # --- THIS IS THE FIX ---
+            # Standardize the filter to use "Purchase" and "Manufacture" to match your CSV data.
+            if item_type and item_type.lower() in ['purchase', 'manufacture']:
                 df = df[df['item_type'].str.lower() == item_type.lower()]
+            # --- END OF FIX ---
+
             if reschedule_needed is True:
                 df = df[df['reschedule_out_days'] > 0]
 
@@ -33,7 +37,18 @@ class QueryTool(BaseTool):
             if query_type.lower() == "count":
                 return self.format_success_response(f"I found {len(df)} planned orders matching your criteria")
 
-            formatted_result = self.data_formatter.format_planned_orders(df, reschedule_needed)
+            cols_to_display = ['planned_order_id', 'item', 'quantity', 'suggested_due_date', 'item_type']
+            if reschedule_needed:
+                cols_to_display = ['planned_order_id', 'item', 'suggested_due_date', 'reschedule_out_days']
+            
+            df_display = df[cols_to_display].copy()
+            df_display['suggested_due_date'] = df_display['suggested_due_date'].dt.strftime('%Y-%m-%d')
+            
+            with pd.option_context('display.width', 1000, 'display.max_rows', None):
+                table = df_display.to_string(index=False)
+            
+            formatted_result = f"Here are the PLANNED orders I found in the local file:\n{table}"
+
             return self.format_success_response(formatted_result)
         except Exception as e:
             return self.format_error_response(f"An error occurred while querying local data: {str(e)}")

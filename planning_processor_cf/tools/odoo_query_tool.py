@@ -17,9 +17,9 @@ class OdooQueryTool(BaseTool):
         self.log_tool_execution("get_odoo_order_details", session_id, planned_order_id=planned_order_id, item_type=item_type, time_description=time_description)
         try:
             results = []
-            base_domain = [['x_planned_order_id', '!=', False]]
+            base_domain = [['x_studio_planned_order_id', '!=', False]]
             if planned_order_id:
-                base_domain.append(['x_planned_order_id', '=', planned_order_id])
+                base_domain.append(['x_studio_planned_order_id', '=', planned_order_id])
 
             if not item_type or item_type.lower() == 'make':
                 results.extend(self.odoo_service.get_production_orders(domain=base_domain))

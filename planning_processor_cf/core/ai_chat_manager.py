@@ -28,7 +28,7 @@ class AIChatManager:
     def create_chat_session(self, session_id: str):
         try:
             model = genai.GenerativeModel(
-                model_name='gemini-2.5-pro',
+                model_name='gemini-2.5-flash',
                 tools=self._tools,
                 system_instruction=self._system_instruction
             )
