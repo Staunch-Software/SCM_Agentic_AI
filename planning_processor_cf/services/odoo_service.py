@@ -53,10 +53,10 @@ class OdooService:
         fields = ['display_name', 'x_studio_planned_order_id', 'date_start', 'state']
         orders = self.search_and_read('mrp.production', domain, fields)
         for order in orders:
-            order['type'] = 'Make'
+            order['type'] = 'Manufacture'
             order['schedule_date'] = order.get('date_start')
         return orders
-
+    
     def get_purchase_orders(self, domain: List) -> List[Dict]:
         fields = ['display_name', 'x_studio_planned_order_id', 'date_planned', 'state']
         orders = self.search_and_read('purchase.order', domain, fields)

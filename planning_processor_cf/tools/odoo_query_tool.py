@@ -17,17 +17,23 @@ class OdooQueryTool(BaseTool):
         self.log_tool_execution("get_odoo_order_details", session_id, planned_order_id=planned_order_id, item_type=item_type, time_description=time_description)
         try:
             results = []
-            base_domain = [['x_studio_planned_order_id', '!=', False]]
+            
+            domain = []
             if planned_order_id:
-                base_domain.append(['x_studio_planned_order_id', '=', planned_order_id])
+                domain.append(['x_studio_planned_order_id', '=', planned_order_id])
+            else:
+                domain.append(['id', '!=', 0])
 
-            if not item_type or item_type.lower() == 'make':
-                results.extend(self.odoo_service.get_production_orders(domain=base_domain))
-            if not item_type or item_type.lower() == 'buy':
-                results.extend(self.odoo_service.get_purchase_orders(domain=base_domain))
+            if not item_type or item_type.lower() == 'manufacture':
+                results.extend(self.odoo_service.get_production_orders(domain=domain))
+            if not item_type or item_type.lower() == 'buy' or item_type.lower() == 'purchase':
+                results.extend(self.odoo_service.get_purchase_orders(domain=domain))
 
+            # --- THIS IS THE FIX ---
+            # Make the response clearer for the AI when no records are found.
             if not results:
-                return self.format_empty_response("I could not find any orders in Odoo matching your criteria")
+                return self.format_empty_response("The query ran successfully, but no Purchase or Manufacturing orders were found in Odoo.")
+            # --- END OF FIX ---
 
             df = pd.DataFrame(results)
             if time_description:
