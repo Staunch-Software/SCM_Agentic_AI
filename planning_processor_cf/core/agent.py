@@ -45,23 +45,22 @@ class SupplyChainAgent:
             odoo_query_tool.get_odoo_order_details,
             verification_tool.check_order_status_in_odoo,
             planning_tool.create_execution_plan,
-            execution_tool.execute_plan_in_odoo,
+            execution_tool.execute_plan,
             rescheduling_tool.analyze_rescheduling_eligibility,
             rescheduling_tool.create_rescheduling_plan,
-            rescheduling_tool.execute_rescheduling_plan,
             rescheduling_tool.get_rescheduling_options,
             rescheduling_tool.validate_rescheduling_request
         ]
         self.ai_chat_manager.register_tools(tools)
         logger.info("All tools initialized and registered")
 
-    def initialize_session(self, session_id: Optional[str] = None) -> str:
+    async def initialize_session(self, session_id: Optional[str] = None) -> str:
         session_id = self.session_manager.create_session(session_id)
-        self.ai_chat_manager.create_chat_session(session_id)
+        await self.ai_chat_manager.create_chat_session(session_id)
         logger.info(f"Initialized agent session: {session_id}")
         return session_id
 
-    def process_message(self, session_id: str, message: str) -> str:
+    async def process_message(self, session_id: str, message: str) -> str:
         try:
             if not self.session_manager.session_exists(session_id):
                 raise AgentError(f"Session {session_id} not found or expired")
@@ -70,7 +69,7 @@ class SupplyChainAgent:
             session_data = self.session_manager.get_session(session_id)
             
             # ENHANCED: Pass session data to AI chat manager
-            response = self.ai_chat_manager.send_message(session_id, message, session_data)
+            response = await self.ai_chat_manager.send_message(session_id, message, session_data)
             formatted_response = self.response_formatter.format_response(response)
             
             # UPDATE SESSION CONTEXT based on user message

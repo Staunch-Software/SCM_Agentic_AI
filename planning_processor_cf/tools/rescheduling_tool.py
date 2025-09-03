@@ -40,12 +40,12 @@ class ReschedulingTool(BaseTool):
             table_data = []
             detailed_analysis = []
             
+            current_date = date.today()
             for _, row in df.iterrows():
                 order_id = row['planned_order_id']
                 try:
                     # Ensure both are date objects for proper comparison
                     suggested_date = pd.to_datetime(row['suggested_due_date']).date()
-                    current_date = date.today()
                     days_difference = (suggested_date - current_date).days
                     
                     # Debug logging - remove after fixing
@@ -66,7 +66,7 @@ class ReschedulingTool(BaseTool):
                 # Add to table data
                 table_data.append([
                     order_id,
-                    row['item_name'],
+                    row['item'],
                     str(suggested_date),
                     days_difference,
                     eligibility_status
@@ -75,7 +75,7 @@ class ReschedulingTool(BaseTool):
                 # Keep detailed analysis for summary
                 analysis = {
                     'planned_order_id': order_id,
-                    'item_name': row['item_name'],
+                    'item': row['item'],
                     'current_date': str(current_date),
                     'suggested_due_date': str(suggested_date),
                     'days_from_today': days_difference,
@@ -205,9 +205,9 @@ class ReschedulingTool(BaseTool):
                     
                     valid_orders.append({
                         'planned_order_id': order_id,
-                        'item_name': order_analysis['item_name'],
+                        'item': order_analysis['item'],
                         'current_suggested_date': order_analysis['suggested_due_date'],
-                        'new_suggested_date': str(new_date),
+                        'new_due_date': str(new_date),
                         'reschedule_type': reschedule_type,
                         'days_changed': (new_date - current_suggested_date).days
                     })
@@ -220,7 +220,7 @@ class ReschedulingTool(BaseTool):
                 'created_at': datetime.now().isoformat()
             }
             
-            self.session_manager.update_session(session_id, rescheduling_plan=rescheduling_plan)
+            self.session_manager.update_session(session_id, last_action_plan=rescheduling_plan)
             
             return json.dumps({
                 'plan_created': True,
@@ -234,64 +234,43 @@ class ReschedulingTool(BaseTool):
         except Exception as e:
             return self.format_error_response(f"Failed to create rescheduling plan: {str(e)}")
 
-    def execute_rescheduling_plan(self, session_id: str) -> str:
-        """
-        Execute the rescheduling plan stored in session
-        """
-        self.log_tool_execution("execute_rescheduling_plan", session_id)
+    # def execute_rescheduling_plan(self, session_id: str) -> str:
+    #     """
+    #     Execute the rescheduling plan stored in session
+    #     """
+    #     self.log_tool_execution("execute_rescheduling_plan", session_id)
         
-        try:
-            session_data = self.session_manager.get_session(session_id)
-            rescheduling_plan = session_data.rescheduling_plan if hasattr(session_data, 'rescheduling_plan') else session_data.get('rescheduling_plan') if isinstance(session_data, dict) else None
+    #     try:
+    #         session_data = self.session_manager.get_session(session_id)
+    #         plan_to_execute = session_data.last_action_plan
+
+    #         if not plan_to_execute:
+    #             return self.format_error_response("No rescheduling plan found. Please create a plan first.")
+
+    #         valid_orders = plan_to_execute.get('valid_orders', [])
+
+    #         if not valid_orders:
+    #             return self.format_error_response("No valid orders to reschedule in the current plan")
             
-            if not rescheduling_plan:
-                return self.format_error_response("No rescheduling plan found. Please create a plan first.")
+    #         # Execute rescheduling through planning service
+    #         results = []
+    #         for order in valid_orders:
+    #             pass
+    #         # Clear the rescheduling plan from session
+    #         self.session_manager.update_session(session_id, rescheduling_plan=None)
             
-            valid_orders = rescheduling_plan.get('valid_orders', [])
+    #         success_count = len([r for r in results if r['status'] == 'success'])
             
-            if not valid_orders:
-                return self.format_error_response("No valid orders to reschedule in the current plan")
+    #         return json.dumps({
+    #             'execution_complete': True,
+    #             'total_orders': len(results),
+    #             'successful': success_count,
+    #             'failed': len(results) - success_count,
+    #             'results': results
+    #         })
             
-            # Execute rescheduling through planning service
-            results = []
-            for order in valid_orders:
-                try:
-                    # Create reschedule action
-                    action_result = self.planning_service.reschedule_order(
-                        planned_order_id=order['planned_order_id'],
-                        new_due_date=order['new_suggested_date'],
-                        reschedule_type=order['reschedule_type']
-                    )
-                    
-                    results.append({
-                        'planned_order_id': order['planned_order_id'],
-                        'status': 'success',
-                        'message': f"Rescheduled from {order['current_suggested_date']} to {order['new_suggested_date']}",
-                        'action_result': action_result
-                    })
-                    
-                except Exception as e:
-                    results.append({
-                        'planned_order_id': order['planned_order_id'],
-                        'status': 'failed',
-                        'message': f"Failed to reschedule: {str(e)}"
-                    })
-            
-            # Clear the rescheduling plan from session
-            self.session_manager.update_session(session_id, rescheduling_plan=None)
-            
-            success_count = len([r for r in results if r['status'] == 'success'])
-            
-            return json.dumps({
-                'execution_complete': True,
-                'total_orders': len(results),
-                'successful': success_count,
-                'failed': len(results) - success_count,
-                'results': results
-            })
-            
-        except Exception as e:
-            return self.format_error_response(f"Failed to execute rescheduling plan: {str(e)}")
+    #     except Exception as e:
+    #         return self.format_error_response(f"Failed to execute rescheduling plan: {str(e)}")
 
     def get_rescheduling_options(self, session_id: str, planned_order_id: Optional[str] = None) -> str:
         """

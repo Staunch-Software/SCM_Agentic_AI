@@ -17,6 +17,8 @@ class PlanningService:
         self.odoo_service = odoo_service
         self.time_parser = TimeParser()
 
+    ODOO_CUSTOM_FIELD_NAME = 'x_studio_planned_order_id'
+
     def create_plan(self, scenario: str, last_queried_ids: Optional[List[str]], **kwargs) -> ActionPlan:
         try:
             df_enriched = self.data_service.load_data()
@@ -208,24 +210,19 @@ class PlanningService:
         Check if an order already exists in Odoo for the given planned order ID
         """
         try:
+            domain = [[self.ODOO_CUSTOM_FIELD_NAME, '=', planned_order_id]]
             # Check production orders
-            production_orders = self.odoo_service.get_production_orders(
-                domain=[['x_planned_order_id', '=', planned_order_id]]
-            )
-            
+            production_orders = self.odoo_service.get_production_orders(domain=domain)
             if production_orders:
+                production_orders[0]['item_type'] = 'Manufacture'
                 return production_orders[0]
             
-            # Check purchase orders
-            purchase_orders = self.odoo_service.get_purchase_orders(
-                domain=[['x_planned_order_id', '=', planned_order_id]]
-            )
-            
+            purchase_orders = self.odoo_service.get_purchase_orders(domain=domain)
             if purchase_orders:
+                purchase_orders[0]['item_type'] = 'Purchase'
                 return purchase_orders[0]
             
             return None
-            
         except Exception as e:
             logger.warning(f"Could not check existing order in Odoo: {str(e)}")
             return None
@@ -244,53 +241,49 @@ class PlanningService:
             results = []
             
             for action in reschedule_actions:
+                planned_order_id = action.get('planned_order_id')
+                new_due_date = action.get('new_due_date')
                 try:
-                    if action.get('status') == 'failed':
-                        results.append({
-                            'planned_order_id': action['planned_order_id'],
-                            'status': 'skipped',
-                            'message': f"Skipped due to planning error: {action.get('error', 'Unknown error')}"
-                        })
-                        continue
-                    
-                    planned_order_id = action['planned_order_id']
-                    new_due_date = action['new_due_date']
-                    
-                    # Update existing order in Odoo if it exists
-                    if action.get('odoo_update_required') and action.get('existing_odoo_id'):
+                    if not planned_order_id or not new_due_date:
+                        raise PlanningError("Action is missing 'planned_order_id' or 'new_due_date'.")
+
+                    # The execution step performs its own check, which is more robust.
+                    existing_order = self._check_existing_order_in_odoo(planned_order_id)
+
+                    if existing_order:
+                        # If it exists, UPDATE it
                         odoo_result = self._update_existing_order_date(
-                            order_id=action['existing_odoo_id'],
+                            order_id=existing_order['id'],
                             new_date=new_due_date,
-                            item_type=action['item_type']
+                            item_type=existing_order['item_type']
                         )
-                        
                         results.append({
                             'planned_order_id': planned_order_id,
                             'status': 'success',
-                            'message': f"Updated existing Odoo order to new date {new_due_date}",
+                            'message': f"Updated existing Odoo order {existing_order.get('name', '')} to new date {new_due_date}",
                             'odoo_result': odoo_result
                         })
-                    
                     else:
-                        # For orders not yet in Odoo, just update local data
-                        # This would typically update your local CSV or database
-                        self._update_local_order_date(planned_order_id, new_due_date)
-                        
+                        # If it does NOT exist, report it and do nothing in Odoo
                         results.append({
                             'planned_order_id': planned_order_id,
                             'status': 'success',
                             'message': f"Updated planned order due date to {new_due_date}",
                             'note': 'Order not yet created in Odoo'
                         })
-                    
+
+                    # Always update the local data file to maintain consistency
+                    self._update_local_order_date(planned_order_id, new_due_date)
+
                 except Exception as e:
+                    logger.error(f"Failed to execute reschedule for {planned_order_id}: {e}", exc_info=True)
                     results.append({
-                        'planned_order_id': action.get('planned_order_id', 'unknown'),
+                        'planned_order_id': planned_order_id,
                         'status': 'failed',
                         'message': f"Failed to execute reschedule: {str(e)}"
                     })
-            
             return results
+
             
         except Exception as e:
             raise PlanningError(f"Failed to execute reschedule actions: {str(e)}")
@@ -300,19 +293,31 @@ class PlanningService:
         Update the due date of an existing order in Odoo
         """
         try:
-            if item_type.lower() == 'make':
-                # Update production order
+            item_type_lower = item_type.lower()
+            
+            print(f"DEBUG: Attempting to update Odoo order ID: {order_id}, Type: '{item_type_lower}', New Date: {new_date}")
+
+            if item_type_lower == 'manufacture':
+                # The date field for manufacturing orders is 'date_planned_start'
+                values_to_update = {'date_start': new_date}
+                print(f"DEBUG: Calling update_production_order with values: {values_to_update}")
                 result = self.odoo_service.update_production_order(
                     order_id=order_id,
-                    values={'date_planned_start': new_date}
+                    values=values_to_update
                 )
-            else:
-                # Update purchase order
+            elif item_type_lower == 'purchase':
+                # The date field for purchase orders is 'date_planned'
+                values_to_update = {'date_planned': new_date}
+                print(f"DEBUG: Calling update_purchase_order with values: {values_to_update}")
                 result = self.odoo_service.update_purchase_order(
                     order_id=order_id,
-                    values={'date_planned': new_date}
+                    values=values_to_update
                 )
+            else:
+                # This case should not be reached if the check is working
+                raise PlanningError(f"Unknown item_type '{item_type}' for Odoo update.")
             
+            print(f"DEBUG: Odoo API response for update: {result}")
             return result
             
         except Exception as e:

@@ -121,3 +121,27 @@ class OdooService:
             return {"status": "success", "odoo_id": mo_id, "message": f"MO {mo_id} created"}
         except Exception as e:
             raise OdooOperationError(f"Failed to create MO: {str(e)}")
+        
+    def update_production_order(self, order_id: int, values: dict) -> bool:
+        """
+        Updates an existing manufacturing order in Odoo.
+        """
+        try:
+            logger.info(f"Updating Manufacturing Order ID {order_id} with values: {values}")
+            # The 'write' method is used for updates. It takes a list of IDs and a dictionary of values.
+            return self.execute_method('mrp.production', 'write', [order_id], values)
+        except Exception as e:
+            logger.error(f"Failed to update Manufacturing Order ID {order_id}: {e}")
+            raise OdooOperationError(f"Failed to update Manufacturing Order: {str(e)}")
+
+    def update_purchase_order(self, order_id: int, values: dict) -> bool:
+        """
+        Updates an existing purchase order in Odoo.
+        """
+        try:
+            logger.info(f"Updating Purchase Order ID {order_id} with values: {values}")
+            # The 'write' method is used for updates.
+            return self.execute_method('purchase.order', 'write', [order_id], values)
+        except Exception as e:
+            logger.error(f"Failed to update Purchase Order ID {order_id}: {e}")
+            raise OdooOperationError(f"Failed to update Purchase Order: {str(e)}")

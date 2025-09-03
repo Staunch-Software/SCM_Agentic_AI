@@ -20,9 +20,9 @@ async def chat(request: ChatRequest, agent: SupplyChainAgent = Depends(get_agent
         session_id = request.session_id or str(uuid.uuid4())
 
         if not agent.session_manager.session_exists(session_id):
-            agent.initialize_session(session_id)
+            await agent.initialize_session(session_id)
 
-        response_text = agent.process_message(session_id, request.message)
+        response_text = await agent.process_message(session_id, request.message)
         
         return ChatResponse(response=response_text, session_id=session_id)
 

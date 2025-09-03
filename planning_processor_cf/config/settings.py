@@ -19,6 +19,10 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     session_timeout: int = 3600  # 1 hour
 
+    # MongoDB Settings  ✅ add these two
+    mongodb_uri: str
+    mongodb_db: str
+
     # Data Settings
     # Correctly resolve the path to the 'data' directory from the project root
     project_root: str = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

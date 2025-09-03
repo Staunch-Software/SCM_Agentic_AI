@@ -4,6 +4,9 @@ from typing import Dict, Any, List
 from config.settings import settings
 from utils.exceptions import AIServiceError
 import logging
+from datetime import datetime
+from db import db
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -26,20 +29,92 @@ class AIChatManager:
         self._tools = tools
         logger.info(f"Registered {len(tools)} tools for AI model")
 
-    def create_chat_session(self, session_id: str):
+    def _save_context_sync(self, session_id: str, user_message: str, ai_response: str):
+        """Synchronous wrapper for saving context"""
         try:
+            loop = asyncio.get_event_loop()
+            loop.create_task(self._save_context_async(session_id, user_message, ai_response))
+        except Exception:
+            pass
+
+    async def _save_context_async(self, session_id: str, user_message: str, ai_response: str):
+        """Save conversation context to MongoDB"""
+        try:
+            await db["chat_context"].update_one(
+                {"sessionId": session_id},
+                {
+                    "$push": {
+                        "conversation": {
+                            "user": user_message,
+                            "assistant": ai_response,
+                            "timestamp": datetime.utcnow()
+                        }
+                    },
+                    "$set": {"lastActivity": datetime.utcnow()}
+                },
+                upsert=True
+            )
+            print(f"✅ Context saved for session {session_id}")
+        except Exception as e:
+            print(f"❌ Context save failed: {e}")
+
+    async def _restore_context_for_session(self, session_id: str, chat_session):
+        """Restore context by replaying conversation"""
+        try:
+            doc = await db["chat_context"].find_one({"sessionId": session_id})
+            if doc and doc.get("conversation"):
+                print(f"🔄 Restoring {len(doc['conversation'])} conversation pairs")
+                
+                # Replay each conversation pair
+                for conv in doc["conversation"]:
+                    try:
+                        # Send user message to rebuild context
+                        chat_session.send_message(conv["user"])
+                    except Exception:
+                        continue  # Skip problematic messages
+                        
+                print(f"✅ Context restored for session {session_id}")
+                return len(doc["conversation"])
+        except Exception as e:
+            print(f"❌ Context restore failed: {e}")
+        return 0
+
+    async def _get_history_from_db(self, session_id: str) -> List[Dict[str, str]]:
+        """Fetches and formats conversation history from MongoDB."""
+        history = []
+        try:
+            doc = await db["chat_context"].find_one({"sessionId": session_id})
+            if doc and doc.get("conversation"):
+                print(f"🔄 Found {len(doc['conversation'])} conversation pairs to restore.")
+                for conv in doc["conversation"]:
+                    # Ensure both user and assistant messages exist
+                    if conv.get("user") and conv.get("assistant"):
+                        history.append({"role": "user", "parts": [conv["user"]]})
+                        history.append({"role": "model", "parts": [conv["assistant"]]})
+            return history
+        except Exception as e:
+            print(f"❌ Failed to retrieve context from DB: {e}")
+            return []
+        
+    async def create_chat_session(self, session_id: str):
+        try:
+            chat_history = await self._get_history_from_db(session_id)
             model = genai.GenerativeModel(
                 model_name='gemini-2.5-flash',
                 tools=self._tools,
                 system_instruction=self._system_instruction
             )
-            self._chat_sessions[session_id] = model.start_chat(
-                enable_automatic_function_calling=True)
-            logger.info(f"Created AI chat session for {session_id}")
+            chat_session = model.start_chat(history=chat_history, enable_automatic_function_calling=True)
+        
+            # ADD THIS - restore context if it exists
+            # restored_count = await self._restore_context_for_session(session_id, chat_session)
+            
+            self._chat_sessions[session_id] = chat_session
+            logger.info(f"Created AI chat session for {session_id} with {len(chat_history) // 2} restored conversation pairs")
         except Exception as e:
             raise AIServiceError(f"Failed to create chat session: {str(e)}")
 
-    def send_message(self, session_id: str, message: str, session_data=None) -> str:
+    async def send_message(self, session_id: str, message: str, session_data=None) -> str:
         if session_id not in self._chat_sessions:
             raise AIServiceError(f"No chat session found for {session_id}")
 
@@ -55,9 +130,18 @@ class AIChatManager:
             if session_data.last_queried_ids:
                 contextual_parts.append(f"Recent orders discussed: {', '.join(session_data.last_queried_ids[:10])}")
             
-            if session_data.last_action_plan and session_data.last_action_plan.actions:
-                plan_summary = f"Last action plan: {len(session_data.last_action_plan.actions)} orders"
-                contextual_parts.append(plan_summary)
+            plan = session_data.last_action_plan
+            if plan:
+                plan_summary = ""
+                # Case 1: It's the standard plan object from planning_tool
+                if hasattr(plan, 'actions') and plan.actions:
+                    plan_summary = f"An execution plan for {len(plan.actions)} order(s) is pending confirmation."
+                # Case 2: It's the rescheduling plan dictionary from rescheduling_tool
+                elif isinstance(plan, dict) and plan.get('valid_orders'):
+                    plan_summary = f"A rescheduling plan for {len(plan['valid_orders'])} order(s) is pending confirmation."
+
+                if plan_summary:
+                    contextual_parts.append(plan_summary)
             
             # Add any relevant context data
             if session_data.context:
@@ -78,7 +162,9 @@ class AIChatManager:
             # Instead of blindly calling response.text, we check if the response
             # actually contains the content we expect.
             if response.parts:
-                return response.text
+                ai_response_text = response.text
+                await self._save_context_async(session_id, message, ai_response_text)
+                return ai_response_text
             else:
                 # This is our new, more informative error. It tells us the model
                 # finished but didn't provide any text content.
@@ -131,6 +217,42 @@ class AIChatManager:
     9. get_rescheduling_options - To show available rescheduling options.
     10. validate_rescheduling_request - To validate rescheduling requests before planning.
     
+    **CRITICAL DATE HANDLING RULES:**
+    BEFORE calling any tool with time parameters, you MUST standardize and validate ALL date expressions:
+
+    **DATE NORMALIZATION REQUIREMENTS:**
+    1. **Always include the year**: Convert "Aug 25" → "Aug 25 2025", "Dec 31" → "Dec 31 2025"
+    2. **Use full format for ranges**: "from Aug 25 to Aug 30" → "from Aug 25 2025 to Aug 30 2025"
+    3. **Standardize relative dates**: "next 3 weeks" → "next 3 weeks", "in two days" → "in 2 days"
+    4. **Current date context**: Today is August 29, 2025. Use this as reference for all relative date calculations.
+
+    **MANDATORY DATE PREPROCESSING:**
+    Before calling query_planned_orders or any time-based tool:
+    1. **Scan the user's request for any date expressions**
+    2. **Convert abbreviated dates to full dates with years**
+    3. **Ensure all relative references are clear and unambiguous**
+    4. **Pass the standardized time_description to the tool**
+
+    **EXAMPLES OF REQUIRED CONVERSIONS:**
+    - User: "orders from Aug 25 to Aug 30" → Tool: time_description="from August 25 2025 to August 30 2025"
+    - User: "next week orders" → Tool: time_description="next week"
+    - User: "Dec orders" → Tool: time_description="December 2025"
+    - User: "orders by end of month" → Tool: time_description="by end of month"
+    - User: "Q4 orders" → Tool: time_description="quarter 4 2025"
+
+    **DATE RANGE INTELLIGENCE:**
+    When users provide date ranges:
+    - Always ensure both start and end dates include years
+    - For current year references without years, default to 2025
+    - For ambiguous past dates, ask for clarification rather than assuming
+
+    **ERROR RECOVERY FOR DATE ISSUES:**
+    If a tool returns "no matching orders" for a date range query:
+    1. **First verify the date range makes sense**: "I'm looking for orders from August 25, 2025 to August 30, 2025"
+    2. **If dates seem wrong, rephrase and retry**: Try alternative date formats
+    3. **If still no results, expand the search**: Try broader date ranges
+    4. **Offer alternatives**: "No orders in that range. Would you like me to check [alternative period]?"
+
     **RESCHEDULING CONVERSATION RULES:**
 
     **SCENARIO 1 - General Reschedule Request:**

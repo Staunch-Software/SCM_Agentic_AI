@@ -109,8 +109,41 @@ class TimeParser:
         self.fiscal_year_start = 4  # April = fiscal year start (customize as needed)
         self.working_days = [0, 1, 2, 3, 4]  # Monday through Friday
 
+    # Add this single method to your TimeParser class - it won't break anything existing
+
+    def preprocess_time_description(self, time_description: str) -> str:
+        """
+        Minimal preprocessing to handle common date issues.
+        This runs BEFORE the existing parsing logic as a safety net.
+        """
+        desc = time_description.strip()
+        
+        # Simple year addition for obvious cases
+        # Only handle clear patterns to avoid breaking existing logic
+        
+        # Handle "Aug 25 to Aug 30" style ranges without years
+        import re
+        month_day_pattern = r'\b([A-Za-z]{3,9})\s+(\d{1,2})(?:\s+to\s+([A-Za-z]{3,9})\s+(\d{1,2}))?\b'
+        
+        def add_current_year(match):
+            month1, day1 = match.group(1), match.group(2)
+            result = f"{month1} {day1} {self.today.year}"
+            
+            if match.group(3) and match.group(4):  # Range case
+                month2, day2 = match.group(3), match.group(4)
+                result += f" to {month2} {day2} {self.today.year}"
+            
+            return result
+        
+        # Apply the pattern only if no year is already present
+        if not re.search(r'\d{4}', desc):
+            desc = re.sub(month_day_pattern, add_current_year, desc)
+        
+        return desc
+
     def filter_dataframe_by_time(self, df: pd.DataFrame, time_description: str, date_column: str) -> pd.DataFrame:
         """Enhanced filter method with comprehensive natural language support"""
+        time_description = self.preprocess_time_description(time_description)
         if date_column not in df.columns:
             raise TimeParsingError(f"Date column '{date_column}' not found in DataFrame")
         
