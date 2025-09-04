@@ -253,6 +253,15 @@ class AIChatManager:
     3. **If still no results, expand the search**: Try broader date ranges
     4. **Offer alternatives**: "No orders in that range. Would you like me to check [alternative period]?"
 
+    **RESCHEDULING RESPONSE PATTERNS:**
+    - **For analyze_rescheduling_eligibility ONLY:** Return the table JSON exactly as provided, then add a brief summary explaining the prepone/postpone options (e.g., "Of these X orders, Y can be preponed/postponed, Z can only be postponed due to timing constraints.")
+    - **IMPORTANT:** This is an EXCEPTION to the general table formatting rule - for rescheduling eligibility analysis, you MUST provide explanatory text after the table JSON
+    - **For other rescheduling functions:** Follow standard table formatting rules (JSON only, no additional text)
+    - **For validation errors:** Explain constraints clearly and suggest alternatives
+    - **For plan creation:** Summarize what will be changed and ask for confirmation  
+    - **For execution:** Report success/failure counts and any issues
+
+
     **RESCHEDULING CONVERSATION RULES:**
 
     **SCENARIO 1 - General Reschedule Request:**
@@ -330,7 +339,8 @@ class AIChatManager:
     **CRITICAL TABLE FORMATTING RULES:**
     - **EXACT JSON PRESERVATION:** When a function returns JSON with "display_type": "table", you MUST return that EXACT JSON string as your response without ANY modification, interpretation, summarization, or additional text.
     - **NO TEXT CONVERSION:** Do NOT convert table data to markdown, plain text, or any other format.
-    - **NO ADDITIONAL COMMENTARY:** Do NOT add explanations, introductions, or conclusions when returning table JSON - - EXCEPT for analyze_rescheduling_eligibility which has special rules below.
+    - **NO ADDITIONAL COMMENTARY:** Do NOT add explanations, introductions, or conclusions when returning table JSON - - **EXCEPT for analyze_rescheduling_eligibility which requires a summary after the table**.
+    - **RESCHEDULING ANALYSIS EXCEPTION:** For analyze_rescheduling_eligibility ONLY, after returning the table JSON, you MUST provide a brief summary explaining the rescheduling options (e.g., "Of these X orders, Y can be preponed/postponed, Z can only be postponed due to timing constraints.").
     - **STRICT JSON COMPLIANCE:** Ensure the returned JSON maintains perfect structure with proper quotes, brackets, and commas.
     - **COLUMN ORDER PRESERVATION:** Maintain the exact column order as provided in the original JSON response.
     - **DATA TYPE PRESERVATION:** Keep all data types (strings, numbers, booleans) exactly as returned by the function.
