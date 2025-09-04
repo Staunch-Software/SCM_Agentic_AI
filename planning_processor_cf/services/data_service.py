@@ -5,6 +5,7 @@ import re
 import pandas as pd
 import os
 from typing import Any, List, Optional,Dict
+from functools import lru_cache
 
 from config.settings import settings
 from utils.exceptions import DataLoadError
@@ -30,6 +31,7 @@ class DataService:
         match = re.search(r'\[(.*?)\]', item_string)
         return match.group(1) if match else None
 
+    @lru_cache(maxsize=None)
     def load_data(self, force_reload: bool = False) -> pd.DataFrame:
         """
         Loads and robustly cleans the planned orders data from the CSV file.
@@ -84,6 +86,39 @@ class DataService:
             logger.error(f"Failed to load data: {e}", exc_info=True)
             raise DataLoadError(f"Failed to load data: {str(e)}")
     
+    @lru_cache(maxsize=None)
+    def load_supplier_rankings(self) -> pd.DataFrame:
+        """
+        Loads and caches the supplier ranking data from the CSV file.
+        Returns an empty DataFrame if the file is not found or invalid.
+        """
+        try:
+            # Path is relative to the project root as specified in the prompt
+            ranking_file_path = os.path.join('..', 'new_supplier_rankings.csv')
+            
+            if not os.path.exists(ranking_file_path):
+                logger.warning(f"Supplier ranking file not found at '{ranking_file_path}'.")
+                return pd.DataFrame()
+
+            df_rankings = pd.read_csv(ranking_file_path)
+            
+            # Clean column headers for consistency
+            df_rankings = self._clean_column_headers(df_rankings)
+            
+            # Validate required columns are present
+            required_cols = ['rank', 'supplier_name']
+            if not all(col in df_rankings.columns for col in required_cols):
+                logger.error(f"Supplier ranking file is missing required columns (rank, supplier_name).")
+                return pd.DataFrame()
+
+            logger.info(f"Successfully loaded {len(df_rankings)} records from supplier rankings.")
+            return df_rankings
+            
+        except Exception as e:
+            logger.error(f"Failed to load supplier rankings: {e}", exc_info=True)
+            # Return an empty dataframe on any error to ensure graceful fallback
+            return pd.DataFrame()
+        
     def save_data(self, df: pd.DataFrame) -> bool:
         """
         Save DataFrame back to the data source (CSV file)

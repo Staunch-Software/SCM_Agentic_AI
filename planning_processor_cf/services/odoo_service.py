@@ -76,7 +76,8 @@ class OdooService:
             if not product_id: return {"status": "failed", "message": f"Product '{item_id}' not found"}
             
             supplier_id = self.find_record_id('res.partner', 'name', supplier_name)
-            if not supplier_id: return {"status": "failed", "message": f"Supplier '{supplier_name}' not found"}
+            if not supplier_id:
+                raise OdooOperationError(f"Supplier '{supplier_name}' not found")
             
             po_vals = {
                 'partner_id': supplier_id,
@@ -90,7 +91,7 @@ class OdooService:
             }
             po_id = self.execute_method('purchase.order', 'create', po_vals)
             self.execute_method('purchase.order', 'button_confirm', [po_id])
-            return {"status": "success", "odoo_id": po_id, "message": f"PO {po_id} created"}
+            return {"status": "success", "odoo_id": po_id, "message": f"PO {po_id} created","supplier_name": supplier_name}
         except Exception as e:
             raise OdooOperationError(f"Failed to create PO: {str(e)}")
 
@@ -121,6 +122,32 @@ class OdooService:
             return {"status": "success", "odoo_id": mo_id, "message": f"MO {mo_id} created"}
         except Exception as e:
             raise OdooOperationError(f"Failed to create MO: {str(e)}")
+    
+    def create_supplier(self, supplier_name: str) -> Dict[str, Any]:
+        """
+        Creates a new supplier (vendor) in Odoo.
+        """
+        try:
+            logger.info(f"Attempting to create new supplier in Odoo: '{supplier_name}'")
+            # Check if supplier already exists to prevent duplicates
+            existing_id = self.find_record_id('res.partner', 'name', supplier_name)
+            if existing_id:
+                logger.warning(f"Supplier '{supplier_name}' already exists with ID {existing_id}. Skipping creation.")
+                return {"status": "skipped", "supplier_id": existing_id, "supplier_name": supplier_name, "message": "Supplier already exists."}
+
+            # Create the partner, marking them as a company/vendor
+            partner_id = self.execute_method(
+                'res.partner', 'create',
+                [{'name': supplier_name, 'is_company': True}]
+            )
+            if partner_id:
+                logger.info(f"Successfully created supplier '{supplier_name}' with ID {partner_id}.")
+                return {"status": "success", "supplier_id": partner_id, "supplier_name": supplier_name}
+            else:
+                raise OdooOperationError("Odoo did not return an ID for the new supplier.")
+        except Exception as e:
+            logger.error(f"Failed to create supplier '{supplier_name}' in Odoo: {e}", exc_info=True)
+            raise OdooOperationError(f"Failed to create supplier '{supplier_name}': {str(e)}")
         
     def update_production_order(self, order_id: int, values: dict) -> bool:
         """

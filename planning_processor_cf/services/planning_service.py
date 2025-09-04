@@ -6,8 +6,9 @@ from services.data_service import DataService
 from services.odoo_service import OdooService
 from utils.time_parser import TimeParser
 from models.session_models import ActionPlan
-from utils.exceptions import PlanningError
+from utils.exceptions import PlanningError, OdooOperationError
 import logging
+import re
 
 logger = logging.getLogger(__name__)
 
@@ -63,6 +64,7 @@ class PlanningService:
                 except (ValueError, TypeError):
                     logger.warning(f"Invalid limit value received: '{limit}'. Ignoring limit.")
 
+            orders_to_action = self._overwrite_supplier_from_rankings(orders_to_action)
             actionable_orders = []
             for _, row in orders_to_action.iterrows():
                 row_dict = row.to_dict()
@@ -80,28 +82,80 @@ class PlanningService:
     def execute_plan(self, actions: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         results = []
         for action in actions:
-            try:
                 order_data = action.get("order_data", {})
-                action_type = action.get("action_type")
-                if action_type == "create":
-                    # --- THIS IS THE FIX ---
-                    # Check for "Manufacture" instead of "Make".
-                    if order_data.get("item_type") == "Manufacture":
-                        result = self.odoo_service.create_manufacturing_order(order_data)
-                    else: # Assumes anything else is a Purchase
-                        result = self.odoo_service.create_purchase_order(order_data)
-                    # --- END OF FIX ---
-                else:
-                    result = {"status": "skipped", "message": "Unknown action type"}
-                results.append(result)
-            except Exception as e:
-                logger.error(f"Error executing action for {order_data.get('planned_order_id', 'N/A')}: {str(e)}")
-                results.append({
-                    "status": "error",
-                    "message": f"Failed for {order_data.get('planned_order_id', 'N/A')}: {str(e)}"
-                })
+                planned_order_id = order_data.get('planned_order_id', 'N/A')
+                try:
+                    action_type = action.get("action_type")
+                    if action_type == "create":
+                        if order_data.get("item_type") == "Manufacture":
+                            result = self.odoo_service.create_manufacturing_order(order_data)
+                        else: # Assumes anything else is a Purchase
+                            result = self.odoo_service.create_purchase_order(order_data)
+                    else:
+                        result = {"status": "skipped", "message": "Unknown action type"}
+                    results.append(result)
+                
+                except OdooOperationError as e:
+                    error_message = str(e)
+                    logger.warning(f"Odoo operation failed for {planned_order_id}: {error_message}")
+                    
+                    # Check for the specific "Supplier not found" error
+                    if "Supplier" in error_message and "not found" in error_message:
+                        # Use regex to safely extract the supplier name
+                        match = re.search(r"Supplier '(.*?)' not found", error_message)
+                        if match:
+                            supplier_name = match.group(1)
+                            # Return a structured response for the AI to handle
+                            results.append({
+                                "status": "requires_user_action",
+                                "action_type": "create_supplier_and_retry",
+                                "message": f"Supplier '{supplier_name}' not found. Proposing creation.",
+                                "data": {
+                                    "supplier_to_create": supplier_name,
+                                    "original_action": action
+                                }
+                            })
+                        else:
+                            # Fallback for unexpected error format
+                            results.append({"status": "error", "message": f"Failed for {planned_order_id}: {error_message}"})
+                    else:
+                        # Handle all other Odoo errors
+                        results.append({"status": "error", "message": f"Failed for {planned_order_id}: {error_message}"})
+
+                except Exception as e:
+                    logger.error(f"Generic error executing action for {planned_order_id}: {e}", exc_info=True)
+                    results.append({
+                        "status": "error",
+                        "message": f"An unexpected error occurred for {planned_order_id}: {str(e)}"
+                    })
         return results
     
+    def create_supplier_and_retry_action(self, supplier_name: str, original_action: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """
+        Creates a supplier in Odoo and then retries the original failed action.
+        """
+        try:
+            logger.info(f"Attempting to create supplier '{supplier_name}' and retry action.")
+            # Step 1: Create the supplier
+            creation_result = self.odoo_service.create_supplier(supplier_name)
+            
+            if creation_result.get("status") in ["success", "skipped"]:
+                logger.info(f"Supplier '{supplier_name}' created or already exists. Retrying original action.")
+                # Step 2: Retry the original action by calling execute_plan with just that action
+                retry_results = self.execute_plan([original_action])
+                if retry_results and retry_results[0].get("status") == "success":
+                    retry_results[0]['supplier_created'] = supplier_name
+                
+                return retry_results
+            else:
+                # The supplier creation itself failed
+                error_message = creation_result.get("message", f"Failed to create supplier '{supplier_name}'.")
+                return [{"status": "error", "message": error_message}]
+
+        except Exception as e:
+            logger.error(f"Error during create-and-retry for supplier '{supplier_name}': {e}", exc_info=True)
+            return [{"status": "error", "message": f"A failure occurred while creating supplier '{supplier_name}': {str(e)}"}]
+        
     # services/planning_service.py - Add these methods to your existing PlanningService class
 
     def reschedule_order(self, planned_order_id: str, new_due_date: str, reschedule_type: str) -> dict:
@@ -345,3 +399,47 @@ class PlanningService:
         except Exception as e:
             logger.error(f"Failed to update local data: {str(e)}")
             # Don't raise exception here as this might be non-critical
+
+    def _overwrite_supplier_from_rankings(self, orders_df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Looks up the top-ranked supplier for 'Purchase' items using the DataService
+        and overwrites the supplier in the DataFrame. Falls back gracefully.
+        """
+        try:
+            # 1. Get supplier rankings from the dedicated service method
+            df_rankings = self.data_service.load_supplier_rankings()
+
+            # 2. Graceful fallback if the ranking data is empty (file not found, corrupt, etc.)
+            if df_rankings.empty:
+                logger.warning("Supplier ranking data is not available. Proceeding with default suppliers.")
+                return orders_df
+
+            # 3. Find the top-ranked supplier (where rank is 1)
+            top_supplier_series = df_rankings[df_rankings['rank'] == 1]
+
+            if top_supplier_series.empty:
+                logger.warning("No supplier with rank 1 was found in the ranking data. Using default suppliers.")
+                return orders_df
+
+            # 4. Get the name of the top supplier. The ranking file has 'supplier_name'.
+            top_supplier_name = top_supplier_series.iloc[0]['supplier_name']
+            logger.info(f"Identified '{top_supplier_name}' as the top-ranked supplier.")
+
+            # 5. Create a copy to avoid pandas' SettingWithCopyWarning
+            modified_orders_df = orders_df.copy()
+
+            # 6. Identify which rows to update (only 'Purchase' items)
+            purchase_mask = modified_orders_df['item_type'].str.lower() == 'purchase'
+            
+            if purchase_mask.any():
+                # 7. Overwrite the supplier. The main data file uses 'supplier_name_for_odoo'.
+                original_suppliers = modified_orders_df.loc[purchase_mask, 'supplier_name_for_odoo'].unique()
+                modified_orders_df.loc[purchase_mask, 'supplier_name_for_odoo'] = top_supplier_name
+                logger.info(f"Overwrote supplier for {purchase_mask.sum()} purchase orders. Original(s): {list(original_suppliers)}. New: '{top_supplier_name}'.")
+            
+            return modified_orders_df
+
+        except Exception as e:
+            # Catch any other unexpected errors during the logic
+            logger.error(f"An unexpected error occurred while overwriting suppliers: {e}. Proceeding with default suppliers.")
+            return orders_df

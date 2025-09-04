@@ -11,6 +11,7 @@ from tools.verification_tool import VerificationTool
 from tools.planning_tool import PlanningTool
 from tools.execution_tool import ExecutionTool
 from tools.rescheduling_tool import ReschedulingTool
+from tools.supplier_tool import CreateSupplierAndRetryTool
 from utils.response_formatter import ResponseFormatter
 from utils.exceptions import AgentError
 import logging
@@ -39,6 +40,7 @@ class SupplyChainAgent:
             self.planning_service, 
             self.session_manager
         )
+        supplier_tool = CreateSupplierAndRetryTool(self.planning_service, self.session_manager)
 
         tools = [
             query_tool.query_planned_orders,
@@ -46,6 +48,7 @@ class SupplyChainAgent:
             verification_tool.check_order_status_in_odoo,
             planning_tool.create_execution_plan,
             execution_tool.execute_plan,
+            supplier_tool.create_supplier_and_retry,
             rescheduling_tool.analyze_rescheduling_eligibility,
             rescheduling_tool.create_rescheduling_plan,
             rescheduling_tool.get_rescheduling_options,

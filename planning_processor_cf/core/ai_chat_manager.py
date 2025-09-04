@@ -211,12 +211,37 @@ class AIChatManager:
     3. check_order_status_in_odoo - To verify if a specific order ID exists in Odoo.
     4. create_execution_plan - When a user gives a command to create, release, or reschedule orders.
     5. execute_plan_in_odoo - For executing a plan after the user gives their final confirmation.
-    6. analyze_rescheduling_eligibility - To check which orders can be preponed/postponed.
-    7. create_rescheduling_plan - To create a rescheduling plan for orders.
-    8. execute_rescheduling_plan - To execute approved rescheduling plans.
-    9. get_rescheduling_options - To show available rescheduling options.
-    10. validate_rescheduling_request - To validate rescheduling requests before planning.
-    
+    6. create_supplier_and_retry - Creates a missing supplier and retries a failed order. Call this ONLY after the user agrees to create the supplier.
+    7. analyze_rescheduling_eligibility - To check which orders can be preponed/postponed.
+    8. create_rescheduling_plan - To create a rescheduling plan for orders.
+    9. execute_rescheduling_plan - To execute approved rescheduling plans.
+    10. get_rescheduling_options - To show available rescheduling options.
+    11. validate_rescheduling_request - To validate rescheduling requests before planning.
+
+    **CRITICAL WORKFLOW RULES**
+        **1. PLAN CREATION AND CONFIRMATION WORKFLOW:**
+    - When the `create_execution_plan` tool is called successfully, you MUST inspect the plan's `actions` to see what is being proposed.
+    - **For Purchase Orders:** You MUST state which supplier was chosen. Your response MUST follow this template: "I have created a plan to create a purchase order for item [item_name]. The top-ranked supplier has been automatically selected for this order. Do you want to confirm and execute this plan?"
+    - **For Manufacture Orders:** Your response MUST follow this template: "I have created a plan to create a manufacturing order for item [item_name]. Do you want to confirm and execute this plan?"
+    - You MUST always end by asking for confirmation.
+
+    **2. EXECUTION REPORTING WORKFLOW:**
+    - When the `execute_plan` tool is called and it returns a successful result, you MUST NOT just show the raw success message.
+    - You MUST parse the result to provide a clear, user-friendly summary.
+    - **For a successful Purchase Order:** If the result contains a `supplier_name`, your response MUST follow this template: "Execution complete. A purchase order was successfully created for supplier '[supplier_name]' with Odoo ID [PO number]."
+    - **For other successful actions:** Your response should be: "Execution complete. Successfully processed [X/Y] action(s)."
+
+    **3. SUPPLIER CREATION AND RETRY WORKFLOW:**
+    - **Step 1 (Ask):** If `execute_plan` fails with a `requires_user_action` status because a supplier was not found, you MUST ask the user for confirmation using this exact template: "The order failed because supplier '[supplier_name]' does not exist in Odoo. Would you like me to create this supplier and try again?"
+    - **Step 2 (Act):** If the user agrees, you MUST call the `create_supplier_and_retry` tool.
+    - **Step 3 (Report):** When the `create_supplier_and_retry` tool succeeds, you MUST parse the result and respond with this exact template: "Success! I have created supplier '[supplier_created]' and the purchase order has been created in Odoo with ID [PO number]."
+
+    **SUPPLIER CREATION WORKFLOW:**
+    - If an execution fails with a status of requires_user_action because a supplier was not found, you MUST ask the user for confirmation.
+    - Your response should be: "The order failed because supplier '[supplier_name]' does not exist in Odoo. Would you like me to create this supplier and try again?"
+    - If the user agrees (e.g., "yes", "ok", "proceed"), you MUST call the create_supplier_and_retry tool.
+    - You MUST pass the supplier_name and the original_action from the failure response to this tool.
+
     **CRITICAL DATE HANDLING RULES:**
     BEFORE calling any tool with time parameters, you MUST standardize and validate ALL date expressions:
 
